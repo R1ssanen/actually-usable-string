@@ -3,7 +3,7 @@
 /**
  * @author github.com/R1ssanen
  * @brief Dynamic string + view implementation
- * @date 10.07.2026
+ * @date 11.07.2026
  * @file aus.c
  */
 
@@ -28,7 +28,7 @@
     }
 
 // casts const away
-AUS_INLINE char *get_data( au_string *str )
+AUS_INLINE char *get_data( aus_str *str )
 {
     return (char *)aus_data( str );
 }
@@ -37,7 +37,7 @@ AUS_INLINE char *get_data( au_string *str )
  * @brief implementation
  */
 
-void aus_free( au_string *str )
+void aus_free( aus_str *str )
 {
     assert( str != NULL );
 
@@ -46,10 +46,10 @@ void aus_free( au_string *str )
         aus_mem_free( str->opt.big.data );
     }
 
-    memset( str, 0, sizeof( au_string ) );
+    memset( str, 0, sizeof( aus_str ) );
 }
 
-void aus_clear( au_string *str )
+void aus_clear( aus_str *str )
 {
     assert( str != NULL );
 
@@ -58,7 +58,7 @@ void aus_clear( au_string *str )
 }
 
 /// @note does not initialize memory
-aus_error aus_with_capacity( size_t size, au_string *out )
+aus_error aus_with_capacity( size_t size, aus_str *out )
 {
     assert( size > 0 );
 
@@ -67,7 +67,7 @@ aus_error aus_with_capacity( size_t size, au_string *out )
         char *data = aus_mem_alloc( size + 1 );
         if ( !data )
         {
-            return AUS_ERR( "Could not allocate memory for creating au_string." );
+            return AUS_ERR( "Could not allocate memory for creating aus_str." );
         }
 
         aus_big_internals_ *big = &out->opt.big;
@@ -86,7 +86,7 @@ aus_error aus_with_capacity( size_t size, au_string *out )
     return AUS_OK;
 }
 
-aus_error aus_from_parts( const char *src, size_t size, au_string *out )
+aus_error aus_from_parts( const char *src, size_t size, aus_str *out )
 {
     assert( src != NULL );
     assert( size > 0 );
@@ -104,13 +104,13 @@ aus_error aus_from_parts( const char *src, size_t size, au_string *out )
     return AUS_OK;
 }
 
-AUS_INLINE aus_error grow_to_accommodate( au_string *str, size_t new_size )
+static aus_error grow_to_accommodate( aus_str *str, size_t new_size )
 {
     if ( str->is_small )
     {
         if ( new_size >= AUS_SSO_LIMIT ) // switch to big mode
         {
-            au_string new;
+            aus_str new;
             aus_error e = aus_with_capacity( new_size, &new );
             if ( e.err )
             {
@@ -133,7 +133,7 @@ AUS_INLINE aus_error grow_to_accommodate( au_string *str, size_t new_size )
             char *resized = aus_mem_realloc( big->data, new_cap + 1 );
             if ( !resized )
             {
-                return AUS_ERR( "Could not allocate memory for growing au_string." );
+                return AUS_ERR( "Could not allocate memory for growing aus_str." );
             }
 
             big->data = resized;
@@ -144,7 +144,7 @@ AUS_INLINE aus_error grow_to_accommodate( au_string *str, size_t new_size )
     return AUS_OK;
 }
 
-aus_error aus_concat_view( au_string *dst, au_string_view src )
+aus_error aus_join_view( aus_str *dst, aus_str_view src )
 {
     assert( dst != NULL );
     assert( src.str != NULL );
@@ -165,7 +165,7 @@ aus_error aus_concat_view( au_string *dst, au_string_view src )
     return AUS_OK;
 }
 
-aus_error aus_shrink_to_fit( au_string *str )
+aus_error aus_shrink_to_fit( aus_str *str )
 {
     assert( str != NULL );
 
@@ -175,7 +175,7 @@ aus_error aus_shrink_to_fit( au_string *str )
         char *resized = aus_mem_realloc( big->data, str->size + 1 );
         if ( !resized )
         {
-            return AUS_ERR( "Could not reallocate to shrink au_string." );
+            return AUS_ERR( "Could not reallocate to shrink aus_str." );
         }
 
         big->data = resized;
@@ -185,7 +185,7 @@ aus_error aus_shrink_to_fit( au_string *str )
     return AUS_OK;
 }
 
-aus_error aus_push( au_string *dst, char c )
+aus_error aus_push( aus_str *dst, char c )
 {
     assert( dst != NULL );
 
@@ -202,4 +202,110 @@ aus_error aus_push( au_string *dst, char c )
     dst->size = new_size;
 
     return AUS_OK;
+}
+
+aus_error aus_pop_index( aus_str *str, size_t index, char *out )
+{
+    assert( str != NULL );
+
+    if ( index >= str->size )
+    {
+        return AUS_ERR( "Pop index out of bounds." );
+    }
+    else
+    {
+        char *data = get_data( str );
+        *out = data[index];
+        memmove( data + index, data + index + 1, ( str->size-- ) - index );
+        return AUS_OK;
+    }
+}
+
+bool aus_pop_front( aus_str *str, char *out )
+{
+    return !aus_pop_index( str, 0, out ).err;
+}
+
+bool aus_pop_back( aus_str *str, char *out )
+{
+    assert( str != NULL );
+
+    if ( aus_is_empty( str ) )
+    {
+        return false;
+    }
+    else
+    {
+        char *data = get_data( str );
+        *out = data[str->size - 1];
+        data[( str->size-- ) - 1] = '\0';
+        return true;
+    }
+}
+
+bool ausv_matches_view( aus_str_view a, aus_str_view b )
+{
+    if ( a.size != b.size )
+    {
+        return false;
+    }
+
+    for ( size_t i = 0; i < a.size; ++i )
+    {
+        if ( a.str[i] != b.str[i] )
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+const char *ausv_find_first( aus_str_view view, char c )
+{
+    for ( const char *p = view.str; p < ( view.str + view.size ); ++p )
+    {
+        if ( *p == c )
+        {
+            return p;
+        }
+    }
+
+    return NULL;
+}
+
+aus_str_view ausv_trim_front( aus_str_view view, const char *trim )
+{
+    aus_str_view trimset = ausv_from_cstr( trim );
+    aus_str_view copy = view;
+
+    for ( size_t i = 0; i < view.size; ++i )
+    {
+        if ( ausv_find_first( trimset, view.str[i] ) == NULL ) // not in trim set
+        {
+            break;
+        }
+        else
+        {
+            copy.str++;
+            copy.size--;
+        }
+    }
+
+    return copy;
+}
+
+aus_str_view ausv_trim_back( aus_str_view view, const char *trim )
+{
+    aus_str_view trimset = ausv_from_cstr( trim );
+
+    for ( ; view.size > 0; --view.size )
+    {
+        if ( ausv_find_first( trimset, view.str[view.size - 1] ) == NULL ) // not in trim set
+        {
+            break;
+        }
+    }
+
+    return view;
 }
