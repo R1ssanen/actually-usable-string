@@ -296,7 +296,7 @@ xview xview_trim_front( xview view, const char *trim )
 
     for ( size_t i = 0; i < view.size; ++i )
     {
-        if ( xview_find_first( trimset, view.str[i] ) == NULL ) // not in trim set
+        if ( !xview_find_first( trimset, view.str[i] ) ) // not in trim set
         {
             break;
         }
@@ -314,7 +314,7 @@ xview xview_trim_back( xview view, const char *trim )
 
     for ( ; view.size > 0; --view.size )
     {
-        if ( xview_find_first( trimset, view.str[view.size - 1] ) == NULL ) // not in trim set
+        if ( !xview_find_first( trimset, view.str[view.size - 1] ) ) // not in trim set
         {
             break;
         }
